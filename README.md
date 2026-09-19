@@ -1,13 +1,14 @@
-# QuickVerse Shop Setup — v1.1.0
+# QuickVerse Shop Setup — v1.2.0
 
-One link, one zip, 2 minutes per shop. No cost.
+One link, one zip, 2 minutes per shop. No cost. Nothing to install except the printer driver.
 
 Dashboard lives at: **https://vendor-dashboard-quickverse.vercel.app/**
 
 ## What to do on a new billing PC (Windows)
 
-**0. One-time prerequisites:** install Node LTS (`nodejs.org`) + Epson driver
+**0. One-time prerequisite:** Epson driver only
 (`EPSON Advanced Printer Driver 6 for TM-T82X`), 80mm roll loaded.
+No Node, no npm, no exe — the agent is pure PowerShell, every Windows runs it.
 
 **1. Download this repo as zip:** click **Code → Download ZIP** on this page
 (or open `https://github.com/Lolxd-1/QuickVerse-Dashboard/archive/refs/heads/main.zip`),
