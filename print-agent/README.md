@@ -1,4 +1,4 @@
-# QuickVerse Print Agent v1.2.0 (billing PC, Windows — NO Node needed)
+# QuickVerse Print Agent v1.3.1-exp3 (billing PC, Windows — NO Node needed)
 
 Silent helper so Chrome dashboard can auto-print without popup,
 to the SAME USB printers PetPooja already uses.
@@ -17,7 +17,10 @@ Old Node version (`server.js`) kept only as fallback.
 ## Setup (2 min, once per shop — or just run `Start-Setup.bat`)
 1. Copy this `print-agent` folder to `C:\QuickVerse\print-agent`. (Nothing to install.)
 2. Test with window (eyes open): run `start-agent.bat` — keep window open.
-   Test: open `http://127.0.0.1:1818/status` in browser → `{"online":true,"version":"1.2.0"}`.
+   Test: open `http://127.0.0.1:1818/status` in browser → `{"online":true,"version":"1.3.1-exp3"}`.
+   Second launch exits friendly (`Already running ... close this window`) instead
+   of fighting over port 1818 — one holder per PC. Failures append to `agent.log`
+   next to the script.
 3. Daily use — no black window: close the .bat, double-click
    `start-agent.vbs` instead (runs same agent hidden in background).
    Auto-start: press Win+R → `shell:startup` → add shortcut to
@@ -28,8 +31,9 @@ Old Node version (`server.js`) kept only as fallback.
 5. Enter GSTIN + FSSAI once — prints on every Counter Bill.
 
 ## API
-- `GET /status` → `{online:true, version:"1.2.0"}`
-- `GET /printers` → `{printers:[...]}`
+- `GET /status` → `{online:true, version:"1.3.1-exp3"}`
+- `GET /printers` → `{printers:[...], real:[...], detail:[...]}`
+- `GET /queue` → `{queues:[{name, status, jobs, hasError, errorText}]}` (spooler truth)
 - `POST /print` `{ "printer": "EPSON TM-T82X Receipt", "text": "80mm slip..." }`
 
 ## Tier-3 notes

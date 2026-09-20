@@ -1,4 +1,4 @@
-# QuickVerse Shop Setup — v1.2.0
+# QuickVerse Shop Setup — v1.3.1
 
 One link, one zip, 2 minutes per shop. No cost. Nothing to install except the printer driver.
 
@@ -10,15 +10,16 @@ Dashboard lives at: **https://vendor-dashboard-quickverse.vercel.app/**
 (`EPSON Advanced Printer Driver 6 for TM-T82X`), 80mm roll loaded.
 No Node, no npm, no exe — the agent is pure PowerShell, every Windows runs it.
 
-**1. Download this repo as zip:** click **Code → Download ZIP** on this page
-(or open `https://github.com/Lolxd-1/QuickVerse-Dashboard/archive/refs/heads/main.zip`),
+**1. Download this repo as zip:** switch branch to **v1.3.1** (latest agent),
+click **Code → Download ZIP** on this page
+(or open `https://github.com/Lolxd-1/QuickVerse-Dashboard/archive/refs/heads/v1.3.1.zip`),
 unzip anywhere.
 
 **2. Run one command** (right-click PowerShell → Run as administrator if you can,
 else normal PowerShell works too):
 
 ```powershell
-cd "<unzipped>\QuickVerse-Dashboard-main"
+cd "<unzipped>\QuickVerse-Dashboard-v1.3.1"
 .\Start-Setup.bat
 ```
 
@@ -32,7 +33,7 @@ Test Counter Print.** Gate: the `123...42` line prints as ONE line.
 
 ## What's inside
 
-- `print-agent/` — silent 80mm print agent v1.1.0 (GDI Courier New, shares queue with PetPooja)
+- `print-agent/` — silent 80mm print agent v1.3.1-exp3 (GDI Courier New, shares queue with PetPooja)
 - `files/Install-QuickVerse.ps1` — the 2-min installer (calls `Install-VendorDashboard.ps1` for shortcut/policy/power)
 - `files/QUICKVERSE-ROLLOUT.md` — pilot 5→20→200 gates + diagnostics
 

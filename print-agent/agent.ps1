@@ -1,4 +1,4 @@
-﻿# QuickVerse Print Agent v1.2.0 - pure PowerShell, ZERO installs.
+﻿# QuickVerse Print Agent v1.3.1-exp3 - pure PowerShell, ZERO installs.
 # Runs on any Windows 10/11 out of the box. No Node, no npm, no exe.
 # Listens only on http://127.0.0.1:1818 - unreachable from network.
 # Dashboard calls: POST http://127.0.0.1:1818/print  { printer, text }
@@ -8,7 +8,54 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AGENT_VERSION = "1.2.0"
+$AGENT_VERSION = "1.3.1-exp3"
+
+# exp3: single-instance guard — ONE holder of 127.0.0.1:1818 per PC.
+# Double-clicks (visible .bat + hidden Startup .vbs + Scheduler) used to fight
+# over the http.sys prefix and die with a scary HttpListenerException, then
+# staff closed the GOOD window. Now the 2nd launch exits friendly (code 2).
+# Pre-probe catches ANY holder (ps1, Node server.js, old version); the named
+# Mutex covers the start-up race. Auto-start = Task Scheduler (primary);
+# visible .bat is for testing only. server.js fallback is kept, untouched.
+$script:AgentMutex = $null
+try {
+    $probe = Invoke-RestMethod -Uri "http://127.0.0.1:$Port/status" -TimeoutSec 2
+    if ($probe.online) {
+        $pv = if ($probe.version) { " (v$($probe.version))" } else { "" }
+        Write-Output "QuickVerse print agent: Already running$pv on http://127.0.0.1:$Port - close this window, helper is up. Verify: http://127.0.0.1:$Port/status"
+        exit 2
+    }
+} catch { <# nothing listening — safe to start #> }
+try {
+    $script:AgentMutex = New-Object System.Threading.Mutex($false, "Global\QuickVersePrintAgent1818")
+    if (-not $script:AgentMutex.WaitOne(0, $false)) {
+        Write-Output "QuickVerse print agent: Already running on http://127.0.0.1:$Port - close this window, helper is up. Verify: http://127.0.0.1:$Port/status"
+        exit 2
+    }
+} catch { <# mutex unavailable — pre-probe already passed, continue #> }
+
+# Log dir captured at script scope ($MyInvocation inside a function points at
+# the function, not the script).
+$script:AgentDir = try { Split-Path -Parent $MyInvocation.MyCommand.Path } catch { "" }
+if (-not $script:AgentDir) { $script:AgentDir = $env:TEMP }
+
+function Write-AgentLog($msg) {
+    # exp3: append-only log next to the script. Never throws — logging must
+    # never break printing.
+    try {
+        $line = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $msg"
+        Add-Content -LiteralPath (Join-Path $script:AgentDir "agent.log") -Value $line -Encoding UTF8 -ErrorAction SilentlyContinue
+    } catch { }
+}
+
+# exp3: warn (don't refuse — never break a working shop) when running from a
+# fragile folder. Canonical home: C:\QuickVerse\print-agent.
+try {
+    if ($script:AgentDir -match 'Downloads|\\Temp\\?|Desktop') {
+        Write-Output "WARNING: running from $script:AgentDir - move to C:\QuickVerse\print-agent for reboot-proof auto-start. Continuing..."
+        Write-AgentLog "WARN running from fragile path: $script:AgentDir"
+    }
+} catch { }
 
 Add-Type -AssemblyName System.Drawing
 
@@ -21,10 +68,61 @@ function Send-Cors($res) {
 }
 
 function Send-Json($res, $obj) {
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes(($obj | ConvertTo-Json -Compress))
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes(($obj | ConvertTo-Json -Compress -Depth 4))
     $res.ContentType = "application/json"
     $res.ContentLength64 = $bytes.Length
     $res.OutputStream.Write($bytes, 0, $bytes.Length)
+}
+
+function Test-IsVirtualPrinter($name, $driver, $port) {
+    # exp1: hide virtual / file-based queues by default (PDF, XPS, OneNote, Fax).
+    # Everything else (USB, WSD, TCP/IP, EPSON/TVSE/STAR, HP/Canon/Brother) = real.
+    # Keep dashboard fallback in sync: src/utils/print/printAgent.ts isVirtualPrinter().
+    $n = "$name"
+    $d = "$driver"
+    $p = "$port"
+    if ($n -match 'Microsoft Print to PDF|Microsoft XPS|OneNote|Fax|Adobe PDF|CutePDF|PDFCreator|Bullzip|PrimoPDF|Print to File|Snagit|Snip & Sketch|XPS Document Writer') { return $true }
+    if ($d -match 'Microsoft Print To PDF|Microsoft XPS|OneNote|Fax|Adobe PDF|CutePDF|PDFCreator|Bullzip|PrimoPDF') { return $true }
+    if ($p -match '^(PORTPROMPT:|SHR:|FILE:|NUL:|XpsPort:|Ne0)') { return $true }
+    return $false
+}
+
+function Get-PrinterDetail() {
+    $rows = @()
+    try { $rows = @(Get-Printer | Select-Object Name, DriverName, PortName) } catch { $rows = @() }
+    $detail = @()
+    foreach ($r in $rows) {
+        $v = Test-IsVirtualPrinter $r.Name $r.DriverName $r.PortName
+        $detail += @{ name = [string]$r.Name; driver = [string]$r.DriverName; port = [string]$r.PortName; isVirtual = [bool]$v }
+    }
+    return $detail
+}
+
+function Get-QueueDetail() {
+    # exp2: spooler truth — PrinterStatus + stuck/error jobs per queue.
+    # Dashboard polls this to turn the Printer dot red BEFORE staff hits Reprint.
+    $rows = @()
+    try { $rows = @(Get-Printer | Select-Object Name, PrinterStatus, JobCount) } catch { $rows = @() }
+    $out = @()
+    foreach ($r in $rows) {
+        $jobs = @()
+        try { $jobs = @(Get-PrintJob -PrinterName $r.Name -ErrorAction SilentlyContinue) } catch { $jobs = @() }
+        $jobErr = ""
+        foreach ($j in $jobs) {
+            $js = [string]$j.JobStatus
+            if ($js -match 'Error|Blocked|Offline|PaperOut|NoToner|NotAvailable|UserIntervention|Paused') { $jobErr = $js; break }
+        }
+        $st = [string]$r.PrinterStatus
+        $hasErr = $false
+        $errText = ""
+        if ($st -and $st -ne 'Normal' -and $st -ne 'Idle') { $hasErr = $true; $errText = $st }
+        if ($jobErr) {
+            $hasErr = $true
+            if ($errText) { $errText = "$errText; $jobErr" } else { $errText = $jobErr }
+        }
+        $out += @{ name = [string]$r.Name; status = $st; jobs = [int]$jobs.Count; hasError = [bool]$hasErr; errorText = [string]$errText }
+    }
+    return $out
 }
 
 function Send-Text($res, $code, $text) {
@@ -76,8 +174,16 @@ function Print-Text($printerName, $text) {
 
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://127.0.0.1:$Port/")
-$listener.Start()
+try {
+    $listener.Start()
+} catch {
+    # Race lost after pre-probe (two launches same second): friendly, not red.
+    Write-Output "QuickVerse print agent: Already running on http://127.0.0.1:$Port - close this window, helper is up. Verify: http://127.0.0.1:$Port/status"
+    Write-AgentLog "START conflict: another holder owns 1818, exiting 2"
+    exit 2
+}
 Write-Output "QuickVerse print agent v$AGENT_VERSION on http://127.0.0.1:$Port - printers share queue with PetPooja."
+Write-AgentLog "START v$AGENT_VERSION on 127.0.0.1:$Port"
 
 while ($listener.IsListening) {
     $ctx = $listener.GetContext()
@@ -93,8 +199,16 @@ while ($listener.IsListening) {
         } elseif ($req.HttpMethod -eq "GET" -and $path -eq "/version") {
             Send-Json $res @{ version = $AGENT_VERSION }
         } elseif ($req.HttpMethod -eq "GET" -and $path -eq "/printers") {
-            $names = @(Get-Printer | Select-Object -ExpandProperty Name)
-            Send-Json $res @{ printers = $names }
+            # exp1: printers = ALL names (backward compat), real = filtered, detail = per-queue meta.
+            # Dashboard hides virtual by default, shows all when "Show all printers" is ticked.
+            $detail = @(Get-PrinterDetail)
+            $names = @($detail | ForEach-Object { $_.name })
+            $real = @($detail | Where-Object { -not $_.isVirtual } | ForEach-Object { $_.name })
+            Send-Json $res @{ printers = $names; real = $real; detail = $detail }
+        } elseif ($req.HttpMethod -eq "GET" -and $path -eq "/queue") {
+            # exp2: spooler truth for the dashboard dot + modal warnings.
+            $queues = @(Get-QueueDetail)
+            Send-Json $res @{ queues = $queues }
         } elseif ($req.HttpMethod -eq "POST" -and $path -eq "/print") {
             $reader = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
             try { $body = $reader.ReadToEnd() } finally { $reader.Close() }
@@ -105,6 +219,7 @@ while ($listener.IsListening) {
                 Send-Text $res 200 "ok"
             } catch {
                 Write-Output ("Print failed: " + $_.Exception.Message)
+                Write-AgentLog ("PRINT-FAIL [$($data.printer)]: " + $_.Exception.Message)
                 Send-Text $res 500 ("print failed: " + $_.Exception.Message)
             }
         } else {

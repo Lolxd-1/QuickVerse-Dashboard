@@ -1,13 +1,13 @@
 ﻿<#
 .SYNOPSIS
-    QuickVerse 2-min shop setup: dashboard shortcut + print agent v1.2.0 (EPSON TM-T82X, no Node).
+    QuickVerse 2-min shop setup: dashboard shortcut + print agent v1.3.1-exp3 (EPSON TM-T82X, no Node).
 
 .DESCRIPTION
     One guy, 2 mins per shop, zero cost:
       1. Verifies Epson/thermal printer queue exists (warns with driver hint if not)
       2. Installs print-agent to C:\QuickVerse\print-agent (copies server.js + launchers)
       3. Registers Task Scheduler at logon (hidden, reliable) + Startup VBS fallback
-      4. Starts agent now, verifies /status v1.1.0 + /printers
+      4. Starts agent now, verifies /status v1.3.1-exp3 + /printers
       5. Reuses Install-VendorDashboard.ps1 steps: Chrome --app shortcut, autoplay policy, NoSleep
       6. Prints 42-col self-test slip + PASS/FAIL checklist
 
@@ -44,7 +44,7 @@ function Write-Fail ($m) { Write-Host "    [fail] $m" -ForegroundColor Red }
 
 $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 Write-Host ""
-Write-Host "  QuickVerse Shop Setup v1.2.0 (no Node needed)" -ForegroundColor White
+Write-Host "  QuickVerse Shop Setup v1.3.1 (no Node needed)" -ForegroundColor White
 Write-Host "  Site: $SiteUrl"
 Write-Host "  Admin: $IsAdmin"
 
@@ -92,7 +92,7 @@ try {
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$AgentDest\agent.ps1`"" -WorkingDirectory $AgentDest
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-    Register-ScheduledTask -TaskName "QuickVerse Print Agent" -Action $action -Trigger $trigger -Settings $settings -Description "QuickVerse silent 80mm print agent v1.2.0 (no Node)" -Force | Out-Null
+    Register-ScheduledTask -TaskName "QuickVerse Print Agent" -Action $action -Trigger $trigger -Settings $settings -Description "QuickVerse silent 80mm print agent v1.3.1-exp3 (no Node)" -Force | Out-Null
     Write-Ok "Scheduled task 'QuickVerse Print Agent' registered"
 } catch {
     Write-Warn2 "Task Scheduler failed: $($_.Exception.Message) - Startup VBS fallback will cover it."
@@ -118,8 +118,8 @@ Start-Sleep -Seconds 3
 $agentOk = $false
 try {
     $st = Invoke-RestMethod -Uri "http://127.0.0.1:1818/status" -TimeoutSec 5
-    if ($st.online -and $st.version -eq "1.2.0") { $agentOk = $true; Write-Ok "Agent online v1.2.0" }
-    else { Write-Warn2 "Agent responded but version=$($st.version) (expected 1.2.0)" }
+    if ($st.online -and $st.version -eq "1.3.1-exp3") { $agentOk = $true; Write-Ok "Agent online v1.3.1-exp3" }
+    else { Write-Warn2 "Agent responded but version=$($st.version) (expected 1.3.1-exp3)" }
 } catch {
     Write-Warn2 "Task start didn't respond - launching hidden fallback..."
     Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","`"$AgentDest\agent.ps1`"" -WorkingDirectory $AgentDest -WindowStyle Hidden
